@@ -6,6 +6,15 @@ import * as Permissions from 'expo-permissions';
 import * as FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
 import base64 from 'base64-js'
+import axios from "axios";
+import 'react-native-get-random-values';
+import { v4 as uuid } from 'uuid';
+import ImageRow from './ImageRow';
+
+const client = axios.create({
+  baseURL: "http://192.168.1.4:19001",
+});
+
 
 
 
@@ -19,6 +28,7 @@ class App extends Component {
     firstScreen: true,
     verifyScreen: false,
     cameraScreen: false,
+    enrollScreen: false,
     cameraType: CameraType.back,
     flash: FlashMode.on,
     setCapturedImageLeft: null,
@@ -27,16 +37,44 @@ class App extends Component {
     leftPhoto: false,
     cameraPreview: false,
     savingStarted: false,
+    verifyRequest: false,
+    enrollRequest: false
   };
   constructor(props: any) {
     super(props);
     
+  }
+  // generate uniqueId
+  generateSessionId() {
+    const unique_id = uuid();
+    const small_id = unique_id.slice(0,8)
+    return small_id;
+  }
+  // generate uniqueId
+  generatePersonId() {
+    const unique_id = uuid();
+    const small_id = unique_id.slice(0,8)
+    return small_id;
   }
 
   handleVerifyPress = () => {
     this.setState({
       firstScreen: false,
       verifyScreen: true,
+      verifyRequest: true,
+      enrollRequest: false,
+      sessionId: this.generateSessionId(),
+    });
+  };
+
+  handleEnrollPress = () => {
+    this.setState({
+      firstScreen: false,
+      enrollScreen: true,
+      enrollRequest: true,
+      verifyRequest: false,
+      sessionId: this.generateSessionId(),
+      personId: this.generatePersonId()
     });
   };
 
@@ -52,22 +90,32 @@ class App extends Component {
   // };
 
   startCamera = async () => {
-    const perm = await Permissions.askAsync(Permissions.MEDIA_LIBRARY);
-        if (perm.status != 'granted') {
-          console.log("Not granted")
-        }
-        const { status } = await Camera.requestCameraPermissionsAsync()
-        let { permissions } = await Permissions.askAsync(Permissions.AUDIO_RECORDING);
-        console.log(status)
-        if (status === 'granted') {
-          this.setState({
-            firstScreen: false,
-            verifyScreen: false,
-            leftPhoto: true,
-          })
-        } else {
-          Alert.alert('Access denied')
-        }
+    console.log('url',client.getUri())
+    const response = await client.get("/api");
+    const getImageresp = await this.getImages();
+    if (response.status === 200) {
+
+      const perm = await Permissions.askAsync(Permissions.MEDIA_LIBRARY);
+      if (perm.status != 'granted') {
+        console.log("Not granted")
+      }
+      const { status } = await Camera.requestCameraPermissionsAsync()
+      let { permissions } = await Permissions.askAsync(Permissions.AUDIO_RECORDING);
+      console.log(status)
+      if (status === 'granted') {
+        this.setState({
+          firstScreen: false,
+          verifyScreen: false,
+          enrollScreen : false,
+          leftPhoto: true,
+        })
+      } else {
+        Alert.alert('Access denied')
+      }
+    }
+    else {
+      console.log('Server not available')
+    }
   }
 
   __handleFlashMode = () => {
@@ -99,6 +147,7 @@ class App extends Component {
     }
   }
   __takePicture = async () => {
+    
     this.camera.takePictureAsync().then(photo => {
       if (this.state.rightPhoto == false) {
         this.setState({ setCapturedImageLeft: photo })
@@ -177,25 +226,145 @@ class App extends Component {
       catch (error) {
         console.log("File save: ", error)
       }
+      try {
+      await this.sendImages()
+      this.setState ({
+        showTextInputs: false,
+        sessionId: '',
+        personId: '',
+        firstScreen: true,
+        verifyScreen: false,
+        cameraScreen: false,
+        cameraType: CameraType.back,
+        flash: FlashMode.on,
+        setCapturedImageLeft: null,
+        setCapturedImageRight: null,
+        rightPhoto : false,
+        leftPhoto: false,
+        cameraPreview: false,
+        savingStarted: false,
+      })
+      }
+      catch (error){
+        console.log(error)
+      }
     }
   }
+  sendImages = async () => {
+    const response = await client.post("/api", {
+      type: "Authenticate",
+      personid: this.state.personId,
+      sessionid: this.state.sessionId,
+    });
+    const status = response.status;
+
+    if (status === 200) {
+      const base64Image_left = await FileSystem.readAsStringAsync(this.state.setCapturedImageLeft.uri, { encoding: 'base64' });
+      console.log("Length: ", base64Image_left.length);
+      // const response_left = await client.post("/api", {
+      //   type: "Picture_Left",
+      //   personid: this.state.personId,
+      //   sessionid: this.state.sessionId,
+      //   setting: "default",
+      //   photo: base64Image_left,
+      // });
+      const base64Image_right = await FileSystem.readAsStringAsync(this.state.setCapturedImageRight.uri, { encoding: 'base64' });
+      console.log("Length: ", base64Image_right.length);
+
+      if (this.state.verifyRequest) {
+        const response_verify = await client.post("/api", {
+          type: "Verify",
+          personid: this.state.personId,
+          sessionid: this.state.sessionId,
+          setting: "default",
+          Picture_Right: base64Image_right,
+          Picture_Left: base64Image_left,
+        });
+        if (response_verify.status === 200) {
+          console.log("verify successful")
+          await this.getImages();
+        }
+      }
+
+      if (this.state.enrollRequest) {
+        const response_enroll = await client.post("/api", {
+          type: "Enroll",
+          personid: this.state.personId,
+          sessionid: this.state.sessionId,
+          setting: "default",
+          Picture_Right: base64Image_right,
+          Picture_Left: base64Image_left,
+        });
+        if (response_enroll.status === 200) {
+          console.log("enroll successful")
+        }
+      }
+    }
+    
+  }
+
+  getImages = async () => {
+    console.log("getImages")
+    const response = await client.get("/images",{
+      params: {
+        sessionid: '3af99a17',
+        imagetype: 'Annotated',
+        }
+      });
+      if (response.status === 200) {
+        console.log("getImages successful")
+        if(response.data.hasOwnProperty('Annotated_Left')){
+          console.log("Annotated_Left")
+          this.setState({
+            Annotated_Left: response.data.Annotated_Left,
+          })
+        }
+        if(response.data.hasOwnProperty('Annotated_Right')){
+          console.log("Annotated_Right")
+          this.setState({
+            Annotated_Right: response.data.Annotated_Right,
+          })
+        }
+      }
+      
+      
+    }
   
 
   render() {
-    const { sessionId, personId, firstScreen, verifyScreen, cameraScreen } = this.state;
+    const { sessionId, personId, firstScreen, verifyScreen, cameraScreen, enrollScreen } = this.state;
 
     return (
       <View style={styles.container}>
         {firstScreen && <Image source={require('./assets/UbLogo.png')} style={styles.imageBackground}></Image>}
         {firstScreen && (
           <View style={styles.buttonContainer}>
-            <Button title="Enroll" onPress={() => console.log("Button 1 pressed")} />
+            <Button title="Enroll" onPress={this.handleEnrollPress} />
             <Button title="Verify" onPress={this.handleVerifyPress} />
           </View>
         )}
         {verifyScreen && (
           <View style={styles.textInputContainer}>
+            {/* <TextInput
+              style={styles.textInput}
+              placeholder="Session ID"
+              placeholderTextColor='black'
+              value={sessionId}
+              onChangeText={(text) => this.setState({ sessionId: text })}
+            /> */}
             <TextInput
+              style={styles.textInput}
+              placeholder="Person ID"
+              placeholderTextColor='black'
+              value={personId}
+              onChangeText={(text) => this.setState({ personId: text })}
+            />
+            <Button title="Take Picture" onPress={this.startCamera} />
+          </View>
+        )}
+        {enrollScreen && (
+          <View style={styles.textInputContainer}>
+            {/* <TextInput
               style={styles.textInput}
               placeholder="Session ID"
               placeholderTextColor='black'
@@ -208,7 +377,7 @@ class App extends Component {
               placeholderTextColor='black'
               value={personId}
               onChangeText={(text) => this.setState({ personId: text })}
-            />
+            /> */}
             <Button title="Take Picture" onPress={this.startCamera} />
           </View>
         )}
@@ -577,7 +746,8 @@ const CameraPreview = ({ photoLeft, photoRight, retakePicture, savePhoto }: any)
             fontWeight: 'bold',
             textAlign: 'center'
           }}>
-          Save Fingerprint
+          
+          Submit Request
             </Text>
       </TouchableOpacity>
 
@@ -609,6 +779,15 @@ const CameraPreview = ({ photoLeft, photoRight, retakePicture, savePhoto }: any)
     </View>
   )
 }
+const ResultsPreview = ({ images }: any) => {
+  return (
+    <View>
+      <ImageRow images={images} />
+    </View>
+  );
+}
+
+
 
 const styles = StyleSheet.create({
   container: {
@@ -645,3 +824,7 @@ const styles = StyleSheet.create({
 });
 
 export default App;
+
+
+
+
