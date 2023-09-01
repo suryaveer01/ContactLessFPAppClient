@@ -12,7 +12,7 @@ import { v4 as uuid } from 'uuid';
 
 
 const client = axios.create({
-  baseURL: "http://10.84.99.29:19001",
+  baseURL: "http://10.20.228.112:19001",
 });
 
 
@@ -2297,3 +2297,7 @@ const styles = StyleSheet.create({
 });
 
 export default App;
+
+
+
+
