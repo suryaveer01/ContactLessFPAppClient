@@ -12,7 +12,7 @@ import { v4 as uuid } from 'uuid';
 
 
 const client = axios.create({
-  baseURL: "http://10.20.228.112:19001",
+  baseURL: "http://192.168.1.7:19001",
 });
 
 
