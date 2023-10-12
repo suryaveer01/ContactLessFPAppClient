@@ -8,11 +8,12 @@ import * as MediaLibrary from 'expo-media-library';
 import base64 from 'base64-js'
 import axios from "axios";
 import 'react-native-get-random-values';
-import { v4 as uuid } from 'uuid';
+import * as Crypto from 'expo-crypto';
+import Spinner from 'react-native-loading-spinner-overlay';
 
 
 const client = axios.create({
-  baseURL: "http://192.168.1.7:19001",
+  baseURL: process.env.BASEURL,
 });
 
 
@@ -53,6 +54,7 @@ class App extends Component {
     enhancedFingerprintMap : [],
     enrolledFingerprintMap : [],
     verification_Scores : null,
+    loading : false,
   };
   constructor(props: any) {
     super(props);
@@ -60,14 +62,21 @@ class App extends Component {
   }
   // generate uniqueId
   generateSessionId() {
-    const unique_id = uuid();
-    const small_id = unique_id.slice(0,8)
+    const UUID = Crypto.randomUUID();
+    console.log('Your UUID: ' + UUID);
+
+    // const unique_id = uuid();
+    const small_id = UUID.slice(0,8)
     return small_id;
   }
   // generate uniqueId
   generatePersonId() {
-    const unique_id = uuid();
-    const small_id = unique_id.slice(0,8)
+    // const unique_id = uuid();
+    const UUID = Crypto.randomUUID();
+    console.log('Your UUID: ' + UUID);
+
+    // const unique_id = uuid();
+    const small_id = UUID.slice(0,8)
     return small_id;
   }
 
@@ -261,7 +270,7 @@ class App extends Component {
 
   savePhotos = async () => {
     console.log("saving strted")
-    this.setState({ savingStarted: true })
+    this.setState({ savingStarted: true, loading :true })
     try {
       await FileSystem.makeDirectoryAsync(FileSystem.documentDirectory + 'images/')
     }
@@ -317,10 +326,10 @@ class App extends Component {
       await this.sendImages()
       if(this.state.verifyRequest){
         this.setState ({verifyResponsePreview : true,
-          verifyResponsePreviewLeft:true})
+          verifyResponsePreviewLeft:true,loading:false})
       }
       if(this.state.enrollRequest){
-        this.setState ({enrollResponsePreview : true})
+        this.setState ({enrollResponsePreview : true,loading:false})
       }
       this.setState ({
         showTextInputs: false,
@@ -364,8 +373,10 @@ class App extends Component {
       // });
       const base64Image_right = await FileSystem.readAsStringAsync(this.state.setCapturedImageRight.uri, { encoding: 'base64' });
       console.log("Length: ", base64Image_right.length);
+      console.log('startTime',new Date())
 
       if (this.state.verifyRequest) {
+        
         const response_verify = await client.post("/api", {
           type: "Verify",
           personid: this.state.personId,
@@ -379,6 +390,7 @@ class App extends Component {
           this.state.verifyResponseMessage = response_verify.data;
           this.state.verification_Scores = response_verify.data.full_scores;
           await this.getImages();
+          console.log('EndTime Verify',new Date())
         }
         else {
           console.log("verify Failed")
@@ -398,6 +410,7 @@ class App extends Component {
         if (response_enroll.status === 200) {
           console.log("enroll successful")
           this.state.enrollResponseMessage = 'Enrollment Successful';
+          console.log('EndTime Enroll',new Date())
         }
         else {
           console.log("enroll Failed")
@@ -633,6 +646,14 @@ class App extends Component {
 
     return (
       <View style={styles.container}>
+        <Spinner
+          //visibility of Overlay Loading Spinner
+          visible={this.state.loading}
+          //Text with the Spinner
+          textContent={'Loading...'}
+          //Text style of the Spinner Text
+          textStyle={styles.spinnerTextStyle}
+        />
         {firstScreen && <Image source={require('./assets/UbLogo.png')} style={styles.imageBackground}></Image>}
         {firstScreen && (
           <View style={styles.buttonContainer}>
@@ -977,6 +998,9 @@ class App extends Component {
                 nextHand = {this.nextHand}
                 verifyResponseMessage = {this.state.verifyResponseMessage}
                 scores = {this.state.verification_Scores}
+                segmentedFingerprintMap = {this.state.segmentedFingerprintMap}
+                enhancedFingerprintMap = {this.state.enhancedFingerprintMap}
+                enrolledFingerprintMap = {this.state.enrolledFingerprintMap}
                  />
             )}
         {this.state.enrollResponsePreview && (
@@ -2122,7 +2146,7 @@ const VerifyScreenPreview_Right = ({ photoLeft, goHome ,nextHand,segmentedFinger
   )
 }
 
-const VerifyScreenPreview_Scores = ({goHome, nextHand,verifyResponseMessage, scores} : any) => {
+const VerifyScreenPreview_Scores = ({goHome, nextHand,verifyResponseMessage, scores, segmentedFingerprintMap, enhancedFingerprintMap, enrolledFingerprintMap} : any) => {
   return (
     <View style={{ height: '100%', width: '100%', alignItems: 'center' }}>
       <View style={{
@@ -2293,6 +2317,9 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     width: "80%",
     fontSize: 15,
+  },
+  spinnerTextStyle: {
+    color: '#FFF',
   },
 });
 
