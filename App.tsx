@@ -2,7 +2,6 @@ import React, { Component } from 'react';
 import { Camera,CameraType,FlashMode, AutoFocus, PermissionResponse  } from 'expo-camera';
 import { Button, ImageBackground, StyleSheet, Text, View,Image, TextInput, TouchableOpacity, Alert, } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import * as Permissions from 'expo-permissions';
 import * as FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
 import base64 from 'base64-js'
@@ -12,8 +11,10 @@ import * as Crypto from 'expo-crypto';
 import Spinner from 'react-native-loading-spinner-overlay';
 
 
+const baseurl: string = (process.env.API_BASE as string);
+
 const client = axios.create({
-  baseURL: process.env.BASEURL,
+  baseURL: baseurl,
 });
 
 
@@ -28,6 +29,7 @@ class App extends Component {
     personId: '',
     firstScreen: true,
     verifyScreen: false,
+    deleteScreen:false,
     cameraScreen: false,
     enrollScreen: false,
     cameraType: CameraType.back,
@@ -115,6 +117,25 @@ class App extends Component {
     });
   };
 
+  handleDeletePress = () => {
+    this.setState({
+      firstScreen: false,
+      verifyScreen: false,
+      verifyRequest: false,
+      enrollRequest: false,
+      deleteScreen: true,
+      deleteRequest: true,
+      sessionId: this.generateSessionId(),
+      verifyResponsePreview: false,
+      verifyResponsePreviewLeft:false,
+      verifyResponsePreviewRight:false,
+      verifyResponsePreviewScore : false,
+      enrollResponsePreview: false,
+      enrollResponseMessage : '',
+      verifyResponseMessage : '',
+    });
+  };
+
   // startCamera = () => {
   //   this.setState({
   //     firstScreen: false,
@@ -132,12 +153,14 @@ class App extends Component {
     // const getImageresp = await this.getImages();
     if (response.status === 200) {
 
-      const perm = await Permissions.askAsync(Permissions.MEDIA_LIBRARY);
+      // const perm = await Permissions.askAsync(Permissions.MEDIA_LIBRARY);
+      const perm = await MediaLibrary.requestPermissionsAsync()
+      console.log(perm)
       if (perm.status != 'granted') {
         console.log("Not granted")
       }
       const { status } = await Camera.requestCameraPermissionsAsync()
-      let { permissions } = await Permissions.askAsync(Permissions.AUDIO_RECORDING);
+      // let { permissions } = await Permissions.askAsync(Permissions.AUDIO_RECORDING);
       console.log(status)
       if (status === 'granted') {
         this.setState({
@@ -216,6 +239,7 @@ class App extends Component {
       // personId: '',
       firstScreen: true,
       verifyScreen: false,
+      deleteScreen: false,
       cameraScreen: false,
       cameraType: CameraType.back,
       flash: FlashMode.on,
@@ -264,6 +288,28 @@ class App extends Component {
         verifyResponsePreviewLeft:true,
         verifyResponsePreviewScore : false,
       })
+    }
+  }
+
+  deleteBiometrics = async () =>{
+    console.log("saving strted")
+    this.setState({  loading :true })
+    try {
+      const response = await client.post("/images", {
+        type: "Delete Images",
+        personid: this.state.personId,
+        sessionid: this.state.sessionId,
+      });
+      const status = response.status;
+  
+      if (status === 200) {
+        console.log("Deleted Biometrics")
+        this.setState({ loading :false })
+        this.goHome()
+      }
+    }
+    catch (error) {
+      console.log("Detete Biometrics error : ", error)
     }
   }
   
@@ -333,7 +379,7 @@ class App extends Component {
       }
       this.setState ({
         showTextInputs: false,
-        sessionId: '',
+        // sessionId: '',
         // personId: '',
         firstScreen: true,
         verifyScreen: false,
@@ -429,7 +475,7 @@ class App extends Component {
       params: {
         sessionid: this.state.sessionId,
         personid: this.state.personId,
-        imagetype: 'Annotated',
+        imagetype: 'Verification',
         }
       });
       if (response.status === 200) {
@@ -449,12 +495,13 @@ class App extends Component {
       }
 
       // get segmented images
-      const response_segmented = await client.get("/images",{
-        params: {
-          sessionid: this.state.sessionId,
-          personid: this.state.personId,
-          imagetype: 'Segmented',
-        }});
+      // const response_segmented = await client.get("/images",{
+      //   params: {
+      //     sessionid: this.state.sessionId,
+      //     personid: this.state.personId,
+      //     imagetype: 'Segmented',
+      //   }});
+      const response_segmented = response
         if (response_segmented.status === 200) {
           console.log("getImages successful")
           if(response_segmented.data.hasOwnProperty('Segmented_fingerprintLeft0')){
@@ -497,12 +544,13 @@ class App extends Component {
         }
 
         // get Enhanced images
-      const response_enhanced = await client.get("/images",{
-        params: {
-          sessionid: this.state.sessionId,
-          personid: this.state.personId,
-          imagetype: 'Enhanced',
-        }});
+      // const response_enhanced = await client.get("/images",{
+      //   params: {
+      //     sessionid: this.state.sessionId,
+      //     personid: this.state.personId,
+      //     imagetype: 'Enhanced',
+      //   }});
+      const response_enhanced = response
         if (response_enhanced.status === 200) {
           console.log("getImages successful")
           if(response_enhanced.data.hasOwnProperty('Enhanced_fingerprintLeft0')){
@@ -642,7 +690,7 @@ class App extends Component {
   
 
   render() {
-    const { sessionId, personId, firstScreen, verifyScreen, cameraScreen, enrollScreen } = this.state;
+    const { sessionId, personId, firstScreen, verifyScreen,deleteScreen, cameraScreen, enrollScreen } = this.state;
 
     return (
       <View style={styles.container}>
@@ -654,11 +702,53 @@ class App extends Component {
           //Text style of the Spinner Text
           textStyle={styles.spinnerTextStyle}
         />
-        {firstScreen && <Image source={require('./assets/UbLogo.png')} style={styles.imageBackground}></Image>}
+        {firstScreen && <Image source={require('./assets/UB_Stacked_SUNY_Small.png')} style={styles.imageBackground}></Image>}
         {firstScreen && (
-          <View style={styles.buttonContainer}>
-            <Button title="Enroll" onPress={this.handleEnrollPress} />
-            <Button title="Verify" onPress={this.handleVerifyPress} />
+          <View style={styles.firstScreenButtons}>
+            <TouchableOpacity 
+            style={{width: '25%',
+            borderRadius: 4,
+            backgroundColor: '#14274e',
+            flexDirection: 'row',
+            justifyContent: 'center',
+            alignItems: 'center'}}
+            onPress={this.handleEnrollPress}
+            >
+              <Text 
+              style={{color:'#fff',
+              textAlign:'center',
+              paddingLeft : 10,
+              paddingRight : 10}}>Enroll</Text></TouchableOpacity>
+            <TouchableOpacity 
+            style={{width: '25%',
+            borderRadius: 4,
+            backgroundColor: '#14274e',
+            flexDirection: 'row',
+            justifyContent: 'center',
+            alignItems: 'center'}}
+            onPress={this.handleVerifyPress}
+            >
+              <Text style={{color:'#fff',
+              textAlign:'center',
+              paddingLeft : 10,
+              paddingRight : 10}}>Verify</Text></TouchableOpacity>
+            <TouchableOpacity 
+            style={{width: '25%',
+            borderRadius: 4,
+            backgroundColor: '#14274e',
+            flexDirection: 'row',
+            justifyContent: 'center',
+            alignItems: 'center'}}
+            onPress={this.handleDeletePress}
+            >
+              <Text style={{color:'#fff',
+              textAlign:'center',
+              paddingLeft : 10,
+              paddingRight : 10}}>Delete</Text></TouchableOpacity>
+            {/* <Button title="Enroll" onPress={this.handleEnrollPress} />
+            <Text style= {{marginHorizontal : 10}}> </Text>
+            
+            <Button title="Verify" onPress={this.handleVerifyPress} /> */}
           </View>
         )}
         {verifyScreen && (
@@ -677,7 +767,54 @@ class App extends Component {
               value={personId}
               onChangeText={(text) => this.setState({ personId: text })}
             />
-            <Button title="Take Picture" onPress={this.startCamera} />
+            <TouchableOpacity 
+            style={{width: '50%',
+            height: 50,
+            borderRadius: 4,
+            backgroundColor: '#14274e',
+            // flexDirection: 'row',
+            justifyContent: 'space-around',
+            alignItems: 'center'}}
+            onPress={this.startCamera}
+            >
+              <Text 
+              style={{fontSize: 15,color:'#fff',
+              textAlign:'center',
+              }}>Take Picture</Text></TouchableOpacity>
+            {/* <Button title="Take Picture" onPress={this.startCamera} /> */}
+          </View>
+        )}
+        {deleteScreen && (
+          <View style={styles.textInputContainer}>
+            {/* <TextInput
+              style={styles.textInput}
+              placeholder="Session ID"
+              placeholderTextColor='black'
+              value={sessionId}
+              onChangeText={(text) => this.setState({ sessionId: text })}
+            /> */}
+            <TextInput
+              style={styles.textInput}
+              placeholder="Person ID"
+              placeholderTextColor='black'
+              value={personId}
+              onChangeText={(text) => this.setState({ personId: text })}
+            />
+            <TouchableOpacity 
+            style={{width: '50%',
+            height: 50,
+            borderRadius: 4,
+            backgroundColor: '#14274e',
+            // flexDirection: 'row',
+            justifyContent: 'space-around',
+            alignItems: 'center'}}
+            onPress={this.deleteBiometrics}
+            >
+              <Text 
+              style={{fontSize: 15,color:'#fff',
+              textAlign:'center',
+              }}>Delete Biometrics</Text></TouchableOpacity>
+            {/* <Button title="Take Picture" onPress={this.startCamera} /> */}
           </View>
         )}
         {enrollScreen && (
@@ -696,7 +833,21 @@ class App extends Component {
               value={personId}
               onChangeText={(text) => this.setState({ personId: text })}
             /> */}
-            <Button title="Take Picture" onPress={this.startCamera} />
+            <TouchableOpacity 
+            style={{width: '50%',
+            height: 50,
+            borderRadius: 4,
+            backgroundColor: '#14274e',
+            // flexDirection: 'row',
+            justifyContent: 'center',
+            alignItems: 'center'}}
+            onPress={this.startCamera}
+            >
+              <Text 
+              style={{fontSize: 15,color:'#fff',
+              textAlign:'center',
+              }}>Take Picture</Text></TouchableOpacity>
+            {/* <Button title="Take Picture" onPress={this.startCamera} /> */}
           </View>
         )}
         {this.state.rightPhoto && (
@@ -977,6 +1128,7 @@ class App extends Component {
                 // photoRight={this.state.Annotated_Left_Enroll}
                 goHome={this.goHome}
                 nextHand = {this.nextHand}
+                deleteBiometrics = {this.deleteBiometrics}
                 segmentedFingerprintMap = {this.state.segmentedFingerprintMap}
                 enhancedFingerprintMap = {this.state.enhancedFingerprintMap}
                 enrolledFingerprintMap = {this.state.enrolledFingerprintMap}
@@ -987,6 +1139,7 @@ class App extends Component {
                 // photoRight={this.state.Annotated_Right_Enroll}
                 goHome={this.goHome}
                 nextHand = {this.nextHand}
+                deleteBiometrics = {this.deleteBiometrics}
                 segmentedFingerprintMap = {this.state.segmentedFingerprintMap}
                 enhancedFingerprintMap = {this.state.enhancedFingerprintMap}
                 enrolledFingerprintMap = {this.state.enrolledFingerprintMap}
@@ -996,6 +1149,7 @@ class App extends Component {
               <VerifyScreenPreview_Scores 
                 goHome={this.goHome}
                 nextHand = {this.nextHand}
+                deleteBiometrics = {this.deleteBiometrics}
                 verifyResponseMessage = {this.state.verifyResponseMessage}
                 scores = {this.state.verification_Scores}
                 segmentedFingerprintMap = {this.state.segmentedFingerprintMap}
@@ -1155,7 +1309,7 @@ const CameraPreview = ({ photoLeft, photoRight, retakePicture, savePhoto }: any)
     </View>
   )
 }
-const VerifyScreenPreview_Left = ({ photoLeft, goHome ,nextHand,segmentedFingerprintMap,enhancedFingerprintMap, enrolledFingerprintMap }: any) => {
+const VerifyScreenPreview_Left = ({ photoLeft, goHome ,nextHand,deleteBiometrics,segmentedFingerprintMap,enhancedFingerprintMap, enrolledFingerprintMap }: any) => {
   return (
     <View style={{ height: '100%', width: '100%', alignItems: 'center' }}>
       <View style={{
@@ -1397,7 +1551,7 @@ const VerifyScreenPreview_Left = ({ photoLeft, goHome ,nextHand,segmentedFingerp
         </View>
         <Text style={{width: '100%', fontSize: 10, textAlign: 'center', marginTop: 0 }}>Enrolled Images</Text>
 
-        {/* Enhanced images */}
+        {/* Enhanced images Left */}
         <View
           style={{
             backgroundColor: 'white',
@@ -1643,14 +1797,57 @@ const VerifyScreenPreview_Left = ({ photoLeft, goHome ,nextHand,segmentedFingerp
           
       </View>
           <View style={styles.buttonContainer}>
-            <Button title="Home" onPress={goHome} /> 
+          <TouchableOpacity 
+            style={{
+            borderRadius: 4,
+            backgroundColor: '#14274e',
+            flexDirection: 'row',
+            justifyContent: 'center',
+            alignItems: 'center'}}
+            onPress={goHome}
+            >
+              <Text 
+              style={{color:'#fff',
+              textAlign:'center',
+              paddingLeft : 10,
+              paddingRight : 10}}>Home</Text></TouchableOpacity>
+              <TouchableOpacity 
+            style={{
+            borderRadius: 4,
+            backgroundColor: '#14274e',
+            flexDirection: 'row',
+            justifyContent: 'center',
+            alignItems: 'center'}}
+            onPress={nextHand}
+            >
+              <Text 
+              style={{color:'#fff',
+              textAlign:'center',
+              paddingLeft : 10,
+              paddingRight : 10}}>Right Hand</Text></TouchableOpacity>
+              <TouchableOpacity 
+            style={{
+            borderRadius: 4,
+            backgroundColor: '#14274e',
+            flexDirection: 'row',
+            justifyContent: 'center',
+            alignItems: 'center'}}
+            onPress={deleteBiometrics}
+            >
+              <Text 
+              style={{color:'#fff',
+              textAlign:'center',
+              paddingLeft : 10,
+              paddingRight : 10}}>Delete Biometrics</Text></TouchableOpacity>
+            {/* <Button title="Home" onPress={goHome} /> 
             <Button title="Right Hand" onPress={nextHand} />
+            <Button title="Delete Biometrics" onPress={deleteBiometrics} /> */}
           </View>
     </View>
   )
 }
 
-const VerifyScreenPreview_Right = ({ photoLeft, goHome ,nextHand,segmentedFingerprintMap,enhancedFingerprintMap, enrolledFingerprintMap }: any) => {
+const VerifyScreenPreview_Right = ({ photoLeft, goHome ,nextHand,deleteBiometrics,segmentedFingerprintMap,enhancedFingerprintMap, enrolledFingerprintMap }: any) => {
   return (
     <View style={{ height: '100%', width: '100%', alignItems: 'center' }}>
       <View style={{
@@ -2139,23 +2336,67 @@ const VerifyScreenPreview_Right = ({ photoLeft, goHome ,nextHand,segmentedFinger
 
       </View>
           <View style={styles.buttonContainer}>
-            <Button title="Home" onPress={goHome} /> 
+          <TouchableOpacity 
+            style={{
+            borderRadius: 4,
+            backgroundColor: '#14274e',
+            flexDirection: 'row',
+            justifyContent: 'center',
+            alignItems: 'center'}}
+            onPress={goHome}
+            >
+              <Text 
+              style={{color:'#fff',
+              textAlign:'center',
+              paddingLeft : 10,
+              paddingRight : 10}}>Home</Text></TouchableOpacity>
+              <TouchableOpacity 
+            style={{
+            borderRadius: 4,
+            backgroundColor: '#14274e',
+            flexDirection: 'row',
+            justifyContent: 'center',
+            alignItems: 'center'}}
+            onPress={nextHand}
+            >
+              <Text 
+              style={{color:'#fff',
+              textAlign:'center',
+              paddingLeft : 10,
+              paddingRight : 10}}>Verification Results</Text></TouchableOpacity>
+              <TouchableOpacity 
+            style={{
+            borderRadius: 4,
+            backgroundColor: '#14274e',
+            flexDirection: 'row',
+            justifyContent: 'center',
+            alignItems: 'center'}}
+            onPress={deleteBiometrics}
+            >
+              <Text 
+              style={{color:'#fff',
+              textAlign:'center',
+              paddingLeft : 10,
+              paddingRight : 10}}>Delete Biometrics</Text></TouchableOpacity>
+            {/* <Button title="Home" onPress={goHome} /> 
             <Button title="Verification Results" onPress={nextHand} />
+            <Button title="Delete Biometrics" onPress={deleteBiometrics} /> */}
           </View>
     </View>
   )
 }
 
-const VerifyScreenPreview_Scores = ({goHome, nextHand,verifyResponseMessage, scores, segmentedFingerprintMap, enhancedFingerprintMap, enrolledFingerprintMap} : any) => {
+const VerifyScreenPreview_Scores = ({goHome, nextHand,deleteBiometrics,verifyResponseMessage, scores, segmentedFingerprintMap, enhancedFingerprintMap, enrolledFingerprintMap} : any) => {
   return (
     <View style={{ height: '100%', width: '100%', alignItems: 'center' }}>
       <View style={{
-        flex: 1,
-        flexDirection: 'column',
-        justifyContent: 'space-around',
-        alignItems: 'center',
-        padding: 20,
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        width: '100%',
+        justifyContent: 'center',
+        // marginTop: 0
       }}>
+
         <View style={{
           marginTop: 10,
           marginBottom: 10,
@@ -2187,105 +2428,547 @@ const VerifyScreenPreview_Scores = ({goHome, nextHand,verifyResponseMessage, sco
           fontSize: 18,
         }}>{verifyResponseMessage['score']}</Text>
         </View>
-      <View style={{
-          flex: 1,
-          alignItems: 'center',
-        }}>
-        <Text style={{fontSize: 20,fontWeight: 'bold',marginBottom: 10,}}>Left Hand</Text>
-        <View style={{
-          marginBottom: 10,
-          padding: 10,
-          backgroundColor: '#f0f0f0',
-          borderRadius: 5,
-        }}>
-        <Text style={{
-          fontSize: 18,
-        }}>LeftIndex: {scores['LeftIndex']}</Text>
+        {/* Enhanced images Left */}
+        <Text style={{ width: '100%',fontSize: 20, textAlign: 'center', marginTop: 10,marginBottom: 10, fontWeight:'bold' }}>Left Hand</Text>
+        <View
+          style={{
+            backgroundColor: 'white',
+            width: '24%',
+            // borderColor: '#a5a5a5',
+            // borderWidth: 0,
+            // shadowColor: '#000',
+            // shadowOffset: { width: 0, height: 1 },
+            // shadowOpacity: 0.8,
+            // shadowRadius: 2,
+            // margin: 0,
+            // padding: 0,
+            // borderRadius: 5,
+            justifyContent: 'center'
+          }}>
+          <ImageBackground
+            source={{ uri: enhancedFingerprintMap['Enhanced_fingerprintLeft0'] }}
+            resizeMode='center'
+            style={{ height: 100 }}>
+            <View
+              style={{
+                flex: 1,
+                flexDirection: 'column',
+                padding: 0,
+                justifyContent: 'flex-end'
+              }}>
+            </View>
+          </ImageBackground>
+          <Text style={{ fontSize: 10, textAlign: 'center', marginTop: 0 }}>LeftIndex{scores['LeftIndex']}</Text>
         </View>
-        <View  style={{
-          marginBottom: 10,
-          padding: 10,
-          backgroundColor: '#f0f0f0',
-          borderRadius: 5,
-        }}>
-        <Text style={{
-          fontSize: 18,
-        }}>LeftMiddle: {scores['LeftMiddle']}</Text>
+        <View
+          style={{
+            backgroundColor: 'white',
+            width: '24%',
+            // borderColor: '#a5a5a5',
+            // borderWidth: 0,
+            // shadowColor: '#000',
+            // shadowOffset: { width: 0, height: 1 },
+            // shadowOpacity: 0.8,
+            // shadowRadius: 2,
+            // margin: 0,
+            // padding: 0,
+            // borderRadius: 5,
+            justifyContent: 'center'
+          }}>
+          <ImageBackground
+            source={{ uri: enhancedFingerprintMap['Enhanced_fingerprintLeft1'] }}
+            resizeMode='center'
+            style={{ height: 100 }}>
+            <View
+              style={{
+                flex: 1,
+                flexDirection: 'column',
+                padding: 0,
+                justifyContent: 'flex-end'
+              }}>
+            </View>
+          </ImageBackground>
+          <Text style={{ fontSize: 10, textAlign: 'center', marginTop: 0 }}>LeftMiddle{scores['LeftMiddle']}</Text>
         </View>
-        <View style={{
-          marginBottom: 10,
-          padding: 10,
-          backgroundColor: '#f0f0f0',
-          borderRadius: 5,
-        }}>
-        <Text style={{
-          fontSize: 18,
-        }}>LeftRing: {scores['LeftRing']}</Text>
+        <View
+          style={{
+            backgroundColor: 'white',
+            width: '24%',
+            // borderColor: '#a5a5a5',
+            // borderWidth: 0,
+            // shadowColor: '#000',
+            // shadowOffset: { width: 0, height: 1 },
+            // shadowOpacity: 0.8,
+            // shadowRadius: 2,
+            // margin: 0,
+            // padding: 0,
+            // borderRadius: 5,
+            justifyContent: 'center'
+          }}>
+          <ImageBackground
+            source={{ uri: enhancedFingerprintMap['Enhanced_fingerprintLeft2'] }}
+            resizeMode='center'
+            style={{ height: 100 }}>
+            <View
+              style={{
+                flex: 1,
+                flexDirection: 'column',
+                padding: 0,
+                justifyContent: 'flex-end'
+              }}>
+            </View>
+          </ImageBackground>
+          <Text style={{ fontSize: 10, textAlign: 'center', marginTop: 0 }}>LeftRing{scores['LeftRing']}</Text>
         </View>
-        <View style={{
-          marginBottom: 10,
-          padding: 10,
-          backgroundColor: '#f0f0f0',
-          borderRadius: 5,
-        }}>
-        <Text style={{
-          fontSize: 18,
-        }}>LeftLittle: {scores['LeftLittle']}</Text>
+        <View
+          style={{
+            backgroundColor: 'white',
+            width: '24%',
+            // borderColor: '#a5a5a5',
+            // borderWidth: 0,
+            // shadowColor: '#000',
+            // shadowOffset: { width: 0, height: 1 },
+            // shadowOpacity: 0.8,
+            // shadowRadius: 2,
+            // margin: 0,
+            // padding: 0,
+            // borderRadius: 5,
+            justifyContent: 'center'
+          }}>
+          <ImageBackground
+            source={{ uri: enhancedFingerprintMap['Enhanced_fingerprintLeft3'] }}
+            resizeMode='center'
+            style={{ height: 100 }}>
+            <View
+              style={{
+                flex: 1,
+                flexDirection: 'column',
+                padding: 0,
+                justifyContent: 'flex-end'
+              }}>
+            </View>
+          </ImageBackground>
+          <Text style={{ fontSize: 10, textAlign: 'center', marginTop: 0 }}>LeftLittle{scores['LeftLittle']}</Text>
         </View>
-      </View>
+        <Text style={{ width: '100%',fontSize: 12, textAlign: 'center', marginTop: 0, fontWeight:'bold' }}>Left Hand Verification Images</Text>
+        <View
+          style={{
+            backgroundColor: 'white',
+            width: '24%',
+            // borderColor: '#a5a5a5',
+            // borderWidth: 0,
+            // shadowColor: '#000',
+            // shadowOffset: { width: 0, height: 1 },
+            // shadowOpacity: 0.8,
+            // shadowRadius: 2,
+            // margin: 0,
+            // padding: 0,
+            // borderRadius: 5,
+            justifyContent: 'center'
+          }}>
+          <ImageBackground
+            source={{ uri: enrolledFingerprintMap['Enhanced_fingerprintLeft0'] }}
+            resizeMode='center'
+            style={{ height: 100 }}>
+            <View
+              style={{
+                flex: 1,
+                flexDirection: 'column',
+                padding: 0,
+                justifyContent: 'flex-end'
+              }}>
+            </View>
+          </ImageBackground>
+          <Text style={{ fontSize: 10, textAlign: 'center', marginTop: 0 }}>LeftIndex{scores['LeftIndex']}</Text>
+        </View>
+        <View
+          style={{
+            backgroundColor: 'white',
+            width: '24%',
+            // borderColor: '#a5a5a5',
+            // borderWidth: 0,
+            // shadowColor: '#000',
+            // shadowOffset: { width: 0, height: 1 },
+            // shadowOpacity: 0.8,
+            // shadowRadius: 2,
+            // margin: 0,
+            // padding: 0,
+            // borderRadius: 5,
+            justifyContent: 'center'
+          }}>
+          <ImageBackground
+            source={{ uri: enrolledFingerprintMap['Enhanced_fingerprintLeft1'] }}
+            resizeMode='center'
+            style={{ height: 100 }}>
+            <View
+              style={{
+                flex: 1,
+                flexDirection: 'column',
+                padding: 0,
+                justifyContent: 'flex-end'
+              }}>
+            </View>
+          </ImageBackground>
+          <Text style={{ fontSize: 10, textAlign: 'center', marginTop: 0 }}>LeftMiddle{scores['LeftMiddle']}</Text>
+        </View>
+        <View
+          style={{
+            backgroundColor: 'white',
+            width: '24%',
+            // borderColor: '#a5a5a5',
+            // borderWidth: 0,
+            // shadowColor: '#000',
+            // shadowOffset: { width: 0, height: 1 },
+            // shadowOpacity: 0.8,
+            // shadowRadius: 2,
+            // margin: 0,
+            // padding: 0,
+            // borderRadius: 5,
+            justifyContent: 'center'
+          }}>
+          <ImageBackground
+            source={{ uri: enrolledFingerprintMap['Enhanced_fingerprintLeft2'] }}
+            resizeMode='center'
+            style={{ height: 100 }}>
+            <View
+              style={{
+                flex: 1,
+                flexDirection: 'column',
+                padding: 0,
+                justifyContent: 'flex-end'
+              }}>
+            </View>
+          </ImageBackground>
+          <Text style={{ fontSize: 10, textAlign: 'center', marginTop: 0 }}>LeftRing{scores['LeftRing']}</Text>
+        </View>
+        <View
+          style={{
+            backgroundColor: 'white',
+            width: '24%',
+            // borderColor: '#a5a5a5',
+            // borderWidth: 0,
+            // shadowColor: '#000',
+            // shadowOffset: { width: 0, height: 1 },
+            // shadowOpacity: 0.8,
+            // shadowRadius: 2,
+            // margin: 0,
+            // padding: 0,
+            // borderRadius: 5,
+            justifyContent: 'center'
+          }}>
+          <ImageBackground
+            source={{ uri: enrolledFingerprintMap['Enhanced_fingerprintLeft3'] }}
+            resizeMode='center'
+            style={{ height: 100 }}>
+            <View
+              style={{
+                flex: 1,
+                flexDirection: 'column',
+                padding: 0,
+                justifyContent: 'flex-end'
+              }}>
+            </View>
+          </ImageBackground>
+          <Text style={{ fontSize: 10, textAlign: 'center', marginTop: 0 }}>LeftLittle{scores['LeftLittle']}</Text>
+          
+        </View>
+        <Text style={{ width: '100%',fontSize: 12, textAlign: 'center', marginTop: 0, fontWeight:'bold' }}>Left Hand Enrolled Images</Text>
 
-      <View style={{
-          flex: 1,
-          alignItems: 'center',
-        }}>
-        <Text style={{fontSize: 20,fontWeight: 'bold',marginBottom: 10,}}>Right Hand</Text>
-        <View  style={{
-          marginBottom: 10,
-          padding: 10,
-          backgroundColor: '#f0f0f0',
-          borderRadius: 5,
-        }}>
-        <Text style={{
-          fontSize: 18,
-        }}>RightIndex: {scores['RightIndex']}</Text>
+        {/* Enhanced images Right */}
+        <Text style={{ width: '100%',fontSize: 20, textAlign: 'center', marginTop: 10,marginBottom: 10, fontWeight:'bold' }}>Right Hand</Text>
+        <View
+          style={{
+            backgroundColor: 'white',
+            width: '24%',
+            // borderColor: '#a5a5a5',
+            // borderWidth: 0,
+            // shadowColor: '#000',
+            // shadowOffset: { width: 0, height: 1 },
+            // shadowOpacity: 0.8,
+            // shadowRadius: 2,
+            // margin: 0,
+            // padding: 0,
+            // borderRadius: 5,
+            justifyContent: 'center'
+          }}>
+          <ImageBackground
+            source={{ uri: enhancedFingerprintMap['Enhanced_fingerprintRight0'] }}
+            resizeMode='center'
+            style={{ height: 100 }}>
+            <View
+              style={{
+                flex: 1,
+                flexDirection: 'column',
+                padding: 0,
+                justifyContent: 'flex-end'
+              }}>
+            </View>
+          </ImageBackground>
+          <Text style={{ fontSize: 10, textAlign: 'center', marginTop: 0 }}>RightIndex{scores['RightIndex']}</Text>
         </View>
-        <View  style={{
-          marginBottom: 10,
-          padding: 10,
-          backgroundColor: '#f0f0f0',
-          borderRadius: 5,
-        }}>
-        <Text style={{
-          fontSize: 18,
-        }}>RightMiddle: {scores['RightMiddle']}</Text>
+        <View
+          style={{
+            backgroundColor: 'white',
+            width: '24%',
+            // borderColor: '#a5a5a5',
+            // borderWidth: 0,
+            // shadowColor: '#000',
+            // shadowOffset: { width: 0, height: 1 },
+            // shadowOpacity: 0.8,
+            // shadowRadius: 2,
+            // margin: 0,
+            // padding: 0,
+            // borderRadius: 5,
+            justifyContent: 'center'
+          }}>
+          <ImageBackground
+            source={{ uri: enhancedFingerprintMap['Enhanced_fingerprintRight1'] }}
+            resizeMode='center'
+            style={{ height: 100 }}>
+            <View
+              style={{
+                flex: 1,
+                flexDirection: 'column',
+                padding: 0,
+                justifyContent: 'flex-end'
+              }}>
+            </View>
+          </ImageBackground>
+          <Text style={{ fontSize: 10, textAlign: 'center', marginTop: 0 }}>RightMiddle{scores['RightMiddle']}</Text>
         </View>
-        <View  style={{
-          marginBottom: 10,
-          padding: 10,
-          backgroundColor: '#f0f0f0',
-          borderRadius: 5,
-        }}>
-        <Text style={{
-          fontSize: 18,
-        }}>RightRing: {scores['RightRing']}</Text>
+        <View
+          style={{
+            backgroundColor: 'white',
+            width: '24%',
+            // borderColor: '#a5a5a5',
+            // borderWidth: 0,
+            // shadowColor: '#000',
+            // shadowOffset: { width: 0, height: 1 },
+            // shadowOpacity: 0.8,
+            // shadowRadius: 2,
+            // margin: 0,
+            // padding: 0,
+            // borderRadius: 5,
+            justifyContent: 'center'
+          }}>
+          <ImageBackground
+            source={{ uri: enhancedFingerprintMap['Enhanced_fingerprintRight2'] }}
+            resizeMode='center'
+            style={{ height: 100 }}>
+            <View
+              style={{
+                flex: 1,
+                flexDirection: 'column',
+                padding: 0,
+                justifyContent: 'flex-end'
+              }}>
+            </View>
+          </ImageBackground>
+          <Text style={{ fontSize: 10, textAlign: 'center', marginTop: 0 }}>RightRing{scores['RightRing']}</Text>
         </View>
-        <View  style={{
-          marginBottom: 10,
-          padding: 10,
-          backgroundColor: '#f0f0f0',
-          borderRadius: 5,
-        }}>
-        <Text style={{
-          fontSize: 18,
-        }}>RightLittle: {scores['RightLittle']}</Text>
+        <View
+          style={{
+            backgroundColor: 'white',
+            width: '24%',
+            // borderColor: '#a5a5a5',
+            // borderWidth: 0,
+            // shadowColor: '#000',
+            // shadowOffset: { width: 0, height: 1 },
+            // shadowOpacity: 0.8,
+            // shadowRadius: 2,
+            // margin: 0,
+            // padding: 0,
+            // borderRadius: 5,
+            justifyContent: 'center'
+          }}>
+          <ImageBackground
+            source={{ uri: enhancedFingerprintMap['Enhanced_fingerprintRight3'] }}
+            resizeMode='center'
+            style={{ height: 100 }}>
+            <View
+              style={{
+                flex: 1,
+                flexDirection: 'column',
+                padding: 0,
+                justifyContent: 'flex-end'
+              }}>
+            </View>
+          </ImageBackground>
+          <Text style={{ fontSize: 10, textAlign: 'center', marginTop: 0 }}>RightLittle{scores['RightLittle']}</Text>
         </View>
+        <Text style={{ width: '100%',fontSize: 12, textAlign: 'center', marginTop: 0, fontWeight:'bold' }}>Right Hand Verification Images</Text>
+        <View
+          style={{
+            backgroundColor: 'white',
+            width: '24%',
+            // borderColor: '#a5a5a5',
+            // borderWidth: 0,
+            // shadowColor: '#000',
+            // shadowOffset: { width: 0, height: 1 },
+            // shadowOpacity: 0.8,
+            // shadowRadius: 2,
+            // margin: 0,
+            // padding: 0,
+            // borderRadius: 5,
+            justifyContent: 'center'
+          }}>
+          <ImageBackground
+            source={{ uri: enrolledFingerprintMap['Enhanced_fingerprintRight0'] }}
+            resizeMode='center'
+            style={{ height: 100 }}>
+            <View
+              style={{
+                flex: 1,
+                flexDirection: 'column',
+                padding: 0,
+                justifyContent: 'flex-end'
+              }}>
+            </View>
+          </ImageBackground>
+          <Text style={{ fontSize: 10, textAlign: 'center', marginTop: 0 }}>RightIndex{scores['RightIndex']}</Text>
+        </View>
+        <View
+          style={{
+            backgroundColor: 'white',
+            width: '24%',
+            // borderColor: '#a5a5a5',
+            // borderWidth: 0,
+            // shadowColor: '#000',
+            // shadowOffset: { width: 0, height: 1 },
+            // shadowOpacity: 0.8,
+            // shadowRadius: 2,
+            // margin: 0,
+            // padding: 0,
+            // borderRadius: 5,
+            justifyContent: 'center'
+          }}>
+          <ImageBackground
+            source={{ uri: enrolledFingerprintMap['Enhanced_fingerprintRight1'] }}
+            resizeMode='center'
+            style={{ height: 100 }}>
+            <View
+              style={{
+                flex: 1,
+                flexDirection: 'column',
+                padding: 0,
+                justifyContent: 'flex-end'
+              }}>
+            </View>
+          </ImageBackground>
+          <Text style={{ fontSize: 10, textAlign: 'center', marginTop: 0 }}>RightMiddle{scores['RightMiddle']}</Text>
+        </View>
+        <View
+          style={{
+            backgroundColor: 'white',
+            width: '24%',
+            // borderColor: '#a5a5a5',
+            // borderWidth: 0,
+            // shadowColor: '#000',
+            // shadowOffset: { width: 0, height: 1 },
+            // shadowOpacity: 0.8,
+            // shadowRadius: 2,
+            // margin: 0,
+            // padding: 0,
+            // borderRadius: 5,
+            justifyContent: 'center'
+          }}>
+          <ImageBackground
+            source={{ uri: enrolledFingerprintMap['Enhanced_fingerprintRight2'] }}
+            resizeMode='center'
+            style={{ height: 100 }}>
+            <View
+              style={{
+                flex: 1,
+                flexDirection: 'column',
+                padding: 0,
+                justifyContent: 'flex-end'
+              }}>
+            </View>
+          </ImageBackground>
+          <Text style={{ fontSize: 10, textAlign: 'center', marginTop: 0 }}>RightRing{scores['RightRing']}</Text>
+        </View>
+        <View
+          style={{
+            backgroundColor: 'white',
+            width: '24%',
+            // borderColor: '#a5a5a5',
+            // borderWidth: 0,
+            // shadowColor: '#000',
+            // shadowOffset: { width: 0, height: 1 },
+            // shadowOpacity: 0.8,
+            // shadowRadius: 2,
+            // margin: 0,
+            // padding: 0,
+            // borderRadius: 5,
+            justifyContent: 'center'
+          }}>
+          <ImageBackground
+            source={{ uri: enrolledFingerprintMap['Enhanced_fingerprintRight3'] }}
+            resizeMode='center'
+            style={{ height: 100 }}>
+            <View
+              style={{
+                flex: 1,
+                flexDirection: 'column',
+                padding: 0,
+                justifyContent: 'flex-end'
+              }}>
+            </View>
+          </ImageBackground>
+          <Text style={{ fontSize: 10, textAlign: 'center', marginTop: 0 }}>RightLittle{scores['RightLittle']}</Text>
+        </View>
+        <Text style={{ width: '100%',fontSize: 12, textAlign: 'center', marginTop: 0, fontWeight:'bold' }}>Right Hand Enrolled Images</Text>
+          
+
       </View>
-      <View style={styles.buttonContainer}>
-        <Button title="Home" onPress={goHome} /> 
-        <Button title="LeftHand" onPress={nextHand} />
-      </View>
-      </View>
-      </View>
+          <View style={styles.buttonContainer}>
+          <TouchableOpacity 
+            style={{
+            borderRadius: 4,
+            backgroundColor: '#14274e',
+            flexDirection: 'row',
+            justifyContent: 'center',
+            alignItems: 'center'}}
+            onPress={goHome}
+            >
+              <Text 
+              style={{color:'#fff',
+              textAlign:'center',
+              paddingLeft : 10,
+              paddingRight : 10}}>Home</Text></TouchableOpacity>
+              <TouchableOpacity 
+            style={{
+            borderRadius: 4,
+            backgroundColor: '#14274e',
+            flexDirection: 'row',
+            justifyContent: 'center',
+            alignItems: 'center'}}
+            onPress={nextHand}
+            >
+              <Text 
+              style={{color:'#fff',
+              textAlign:'center',
+              paddingLeft : 10,
+              paddingRight : 10}}>Left Hand</Text></TouchableOpacity>
+              <TouchableOpacity 
+            style={{
+            borderRadius: 4,
+            backgroundColor: '#14274e',
+            flexDirection: 'row',
+            justifyContent: 'center',
+            alignItems: 'center'}}
+            onPress={deleteBiometrics}
+            >
+              <Text 
+              style={{color:'#fff',
+              textAlign:'center',
+              paddingLeft : 10,
+              paddingRight : 10}}>Delete Biometrics</Text></TouchableOpacity>
+            {/* <Button title="Home" onPress={goHome} /> 
+            <Button title="Left Hand" onPress={nextHand} />
+            <Button title="Delete Biometrics" onPress={deleteBiometrics} /> */}
+          </View>
+    </View>
       );
 }
 
@@ -2304,7 +2987,24 @@ const styles = StyleSheet.create({
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    marginBottom: 20,
+    marginBottom: 10,
+    borderRadius: 4,
+    height : 30,
+    // backgroundColor: '#14274e',
+    width: "80%",
+    // paddingHorizontal: 20,
+    // marginHorizontal: 20,
+  },
+  firstScreenButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 80,
+    borderRadius: 4,
+    height : 50,
+    // backgroundColor: '#14274e',
+    width: "80%",
+    // paddingHorizontal: 20,
+    // marginHorizontal: 20,
   },
   textInputContainer: {
     paddingHorizontal: 20,
@@ -2321,6 +3021,10 @@ const styles = StyleSheet.create({
   spinnerTextStyle: {
     color: '#FFF',
   },
+  // button: {
+  //   borderRadius: 4,
+  //   backgroundColor: '#14274e',
+  // }
 });
 
 export default App;
