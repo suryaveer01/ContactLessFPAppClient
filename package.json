@@ -11,8 +11,8 @@
     "expo-updates": "~0.16.4",
     "react": "18.2.0",
     "react-dom": "18.2.0",
-    "react-native": "0.71.3",
-    "react-native-get-random-values": "^1.8.0",
+    "react-native": "0.71.14",
+    "react-native-get-random-values": "~1.9.0",
     "react-native-loading-spinner-overlay": "^3.0.1",
     "react-native-web": "~0.18.7",
     "ts-node": "^10.9.1"
